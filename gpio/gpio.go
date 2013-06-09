@@ -147,16 +147,20 @@ type GPIO struct {
 // sysfs, and returns the GPIO structure.
 func Export(pin int) (gpio *GPIO, err error) {
 	gpio = new(GPIO)
+	var f *os.File
 
-	f, err := os.OpenFile("/sys/class/gpio/export", os.O_WRONLY, 0666)
-	if err != nil {
-		return
-	}
-	defer f.Close()
+	_, err = os.Stat(fmt.Sprintf("/sys/class/gpio/gpio%d", pin))
+	if err != nil && os.IsNotExist(err) {
+		f, err = os.OpenFile("/sys/class/gpio/export", os.O_WRONLY, 0666)
+		if err != nil {
+			return
+		}
+		defer f.Close()
 
-	_, err = fmt.Fprintf(f, "%d", pin)
-	if err != nil {
-		return
+		_, err = fmt.Fprintf(f, "%d", pin)
+		if err != nil {
+			return
+		}
 	}
 	gpio.Pin = pin
 	gpio.ValueFile = nil
