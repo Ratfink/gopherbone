@@ -20,6 +20,10 @@
  * IN THE SOFTWARE.
  */
 
+/* This GPIO system uses the sysfs interface to control digital inputs and
+ * outputs.  It would probably be better to use the interface built in to the
+ * kernel, but sysfs is easy and safe.
+ */
 package gpio
 
 import (
