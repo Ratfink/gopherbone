@@ -96,6 +96,13 @@ const (
 	NOP = 0xe3
 )
 
+// Charge pump commands
+const (
+	CHARGE_PUMP = 0x8d // 2 bytes; follow with one of the following
+	CHARGE_PUMP_OFF = 0x10
+	CHARGE_PUMP_ON = 0x14
+)
+
 type SSD1306 struct {
     rst *gpio.GPIO
     iface int
@@ -133,6 +140,7 @@ func (ssd1306 *SSD1306) Close() {
 }
 
 func (ssd1306 *SSD1306) Setup() (err error) {
+	// Reset the display
 	err = ssd1306.rst.SetDirection("out")
 	if err != nil {
 		return
@@ -147,31 +155,24 @@ func (ssd1306 *SSD1306) Setup() (err error) {
 		return
 	}
 
-    //--turn off oled panel
-    //--set start line address
-    //--set memory addressing mode
-    //---horizontal addressing mode
-    //--set contrast control register
-    //--
-    //--set segment re-map 95 to 0
-    //--set normal display
-    //--set multiplex ratio(1 to 64)
-    //--1/64 duty
-    //-set display offset
-    //-not offset
-	//--scan from COM[N-1] to COM[0]
-    //--set display clock divide ratio/oscillator frequency
-    //--set divide ratio
-    //--set pre-charge period
-    //--
-    //--set com pins hardware configuration
-    //--
-    //--set vcomh
-    //--
-    //--set Charge Pump enable/disable
-    //--set(0x10) disable
-    //--turn on oled panel
-	ssd1306.WriteCmd([]byte{0xae, 0x40, 0x20, 0x00, 0x81, 0xcf, 0xa1, 0xa6, 0xa8, 0x3f, 0xd3, 0x00, 0xc8, 0xd5, 0xf0, 0xd9, 0xf1, 0xda, 0x12, 0xdb, 0x40, 0x8d, 0x14, 0xaf});
+	// Configure the display.  The whole thing is 24 bytes, so send it in one big write.
+	ssd1306.WriteCmd([]byte{
+		DISP_OFF,
+		START_LINE | 0x00,
+		ADDRESS_MODE, ADDRESS_MODE_HORI,
+		CONTRAST, 0xcf,
+		HORI_MIRROR,
+		INVERSE_OFF,
+		MUX_RATIO, 0x3f,
+		VERT_SHIFT, 0x00,
+		VERT_MIRROR,
+		CLOCK_FREQ, 0xf0,
+		PRECHARGE, 0xf1,
+		COM_CONFIG, COM_CONFIG2 | COM_CONFIG2_ALT,
+		VCOMH_DESELECT_LEVEL, 0x40,
+		CHARGE_PUMP, CHARGE_PUMP_ON,
+		DISP_ON})
+
 	return
 }
 
