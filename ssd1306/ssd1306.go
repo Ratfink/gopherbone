@@ -24,9 +24,6 @@ package ssd1306
 
 import (
 	"github.com/Ratfink/gopherbone/gpio"
-	// Use the "refactor" branch - switch back to "bitbucket.org/gmcbay/i2c"
-	// eventually, when the pull request is accepted.
-//	"bitbucket.org/corburn/i2c"
 	"github.com/Ratfink/gopherbone/i2c"
 	"time"
 	"image/color"
@@ -37,6 +34,66 @@ import (
 const (
 	IFACE_SPI = 0
 	IFACE_I2C = 1
+)
+
+// Fundamental commands
+const (
+	CONTRAST = 0x81 // 2 bytes; follow with 8 contrast bits
+	DISP_RAM = 0xa4 // Display what's in RAM
+	DISP_ALL = 0xa5 // All white
+	INVERSE_OFF = 0xa6
+	INVERSE_ON = 0xa7
+	DISP_OFF = 0xae
+	DISP_ON = 0xaf
+)
+
+// Scrolling commands
+// These should probably be documented and made easier to use, but for now just
+// check the datasheet.
+const (
+	HSCROLL_RIGHT = 0x26 // 7 bytes
+	HSCROLL_LEFT = 0x27 // 7 bytes
+	VHSCROLL_RIGHT = 0x29 // 6 bytes
+	VHSCROLL_LEFT = 0x2a // 6 bytes
+	STOP_SCROLL = 0x2e
+	START_SCROLL = 0x2f
+	VSCROLL = 0xa3 // 3 bytes
+)
+
+// Addressing setting commands
+const (
+	PAGE_START_LOW = 0x00 // OR with low nibble (4 bits)
+	PAGE_START_HIGH = 0x10 // OR with high nibble (4 bits)
+	ADDRESS_MODE = 0x20 // 2 bytes; follow with one of the ADDRESS_MODE_* bytes
+	ADDRESS_MODE_HORI = 0x00
+	ADDRESS_MODE_VERT = 0x01
+	ADDRESS_MODE_PAGE = 0x02
+	COLUMN_ADDRESS = 0x21 // 3 bytes; follow with start and end addresses
+	PAGE_ADDRESS = 0x22 // 3 bytes; follow with start and end pages
+	PAGE_START = 0xB0 // OR with page address (3 bits)
+)
+
+// Hardware configuration commands
+const (
+	START_LINE = 0x40 // OR with start line for display (6 bits)
+	HORI_NORMAL = 0xa0
+	HORI_MIRROR = 0xa1
+	MUX_RATIO = 0xa8 // 2 bytes; follow with 6 bit mux ratio (14 < r < 64)
+	VERT_NORMAL = 0xc0
+	VERT_MIRROR = 0xc8
+	VERT_SHIFT = 0xd3 // 2 bytes; follow with 6 bit shift
+	COM_CONFIG = 0xda // 2 bytes; follow with COM_CONFIG2 | COM_CONFIG2_*
+	COM_CONFIG2 = 0x02
+	COM_CONFIG2_ALT = 0x10
+	COM_CONFIG2_LR_REMAP = 0x20
+)
+
+// Timing and driving scheme commands
+const (
+	CLOCK_FREQ = 0xd5 // 2 bytes; 2nd byte: low nibble is D, high nibble is F[osc]
+	PRECHARGE = 0xd9 // 2 bytes; 2nd byte: low nibble is phase 1, high nibble is phase 2
+	VCOMH_DESELECT_LEVEL = 0xdb // 2 bytes; 2nd byte: 0x00, 0x20, or 0x30 (voltages; see datasheet)
+	NOP = 0xe3
 )
 
 type SSD1306 struct {
@@ -102,6 +159,7 @@ func (ssd1306 *SSD1306) Setup() (err error) {
     //--1/64 duty
     //-set display offset
     //-not offset
+	//--scan from COM[N-1] to COM[0]
     //--set display clock divide ratio/oscillator frequency
     //--set divide ratio
     //--set pre-charge period
@@ -113,29 +171,7 @@ func (ssd1306 *SSD1306) Setup() (err error) {
     //--set Charge Pump enable/disable
     //--set(0x10) disable
     //--turn on oled panel
-	ssd1306.WriteCmd([]byte{0xae, 0x40, 0x20, 0x00, 0x81, 0xcf, 0xa1, 0xa6, 0xa8, 0x3f, 0xd3, 0x00, 0xd5, 0xf0, 0xd9, 0xf1, 0xda, 0x12, 0xdb, 0x40, 0x8d, 0x14, 0xaf});
-/*	bone_ssd1306_cmd(disp, 0x40);
-	bone_ssd1306_cmd(disp, 0x20);
-	bone_ssd1306_cmd(disp, 0x00);
-	bone_ssd1306_cmd(disp, 0x81);
-	bone_ssd1306_cmd(disp, 0xCF);
-	bone_ssd1306_cmd(disp, 0xA1);
-	bone_ssd1306_cmd(disp, 0xA6);
-	bone_ssd1306_cmd(disp, 0xA8);
-	bone_ssd1306_cmd(disp, 0x3F);
-	bone_ssd1306_cmd(disp, 0xD3);
-	bone_ssd1306_cmd(disp, 0x00);
-	bone_ssd1306_cmd(disp, 0xD5);
-	bone_ssd1306_cmd(disp, 0xF0);
-	bone_ssd1306_cmd(disp, 0xD9);
-	bone_ssd1306_cmd(disp, 0xF1);
-	bone_ssd1306_cmd(disp, 0xDA);
-	bone_ssd1306_cmd(disp, 0x12);
-	bone_ssd1306_cmd(disp, 0xDB);
-	bone_ssd1306_cmd(disp, 0x40);
-	bone_ssd1306_cmd(disp, 0x8D);
-	bone_ssd1306_cmd(disp, 0x14);
-	bone_ssd1306_cmd(disp, 0xAF);*/
+	ssd1306.WriteCmd([]byte{0xae, 0x40, 0x20, 0x00, 0x81, 0xcf, 0xa1, 0xa6, 0xa8, 0x3f, 0xd3, 0x00, 0xc8, 0xd5, 0xf0, 0xd9, 0xf1, 0xda, 0x12, 0xdb, 0x40, 0x8d, 0x14, 0xaf});
 	return
 }
 
@@ -201,7 +237,7 @@ func (ssd1306 *SSD1306) Point(x, y uint, c color.Gray16) {
 		return
 	}
 
-	element := ssd1306.width*(y>>3) + x;
+	element := ssd1306.width*(y/8) + x;
     if (c == color.White) {
         ssd1306.buf[element] |= 1 << (y % 8);
     } else {
