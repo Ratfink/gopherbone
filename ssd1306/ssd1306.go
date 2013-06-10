@@ -27,6 +27,7 @@ import (
 	"github.com/Ratfink/gopherbone/i2c"
 	"time"
 	"image/color"
+	"math"
 )
 
 // Constants to allow different serial interfaces to be used in communicating
@@ -104,15 +105,15 @@ const (
 )
 
 type SSD1306 struct {
-    rst *gpio.GPIO
-    iface int
-    i2cbus *i2c.Bus
-    width uint
-    height uint
-    buf []byte
+	rst *gpio.GPIO
+	iface int
+	i2cbus *i2c.Bus
+	width int
+	height int
+	buf []byte
 }
 
-func New(rstpin, iface int, addr, bus byte, width, height uint) (ssd1306 *SSD1306, err error) {
+func New(rstpin, iface int, addr, bus byte, width, height int) (ssd1306 *SSD1306, err error) {
 	ssd1306 = new(SSD1306)
 
 	ssd1306.rst, err = gpio.Export(rstpin)
@@ -233,15 +234,172 @@ func (ssd1306 *SSD1306) Clear(c color.Gray16) {
 	}
 }
 
-func (ssd1306 *SSD1306) Point(x, y uint, c color.Gray16) {
-	if x >= ssd1306.width || y >= ssd1306.height {
+func (ssd1306 *SSD1306) Point(x, y int, c color.Gray16) {
+	if x >= ssd1306.width || y >= ssd1306.height || x < 0 || y < 0 {
 		return
 	}
 
 	element := ssd1306.width*(y/8) + x;
-    if (c == color.White) {
-        ssd1306.buf[element] |= 1 << (y % 8);
-    } else {
-        ssd1306.buf[element] &^= byte(1) << (y % 8);
+	if (c == color.White) {
+		ssd1306.buf[element] |= 1 << (uint(y) % 8);
+	} else {
+		ssd1306.buf[element] &^= byte(1) << (uint(y) % 8);
+	}
+}
+
+func (ssd1306 *SSD1306) Line(x0, y0, x1, y1 int, c color.Gray16) {
+	dx := math.Abs(float64(x1) - float64(x0))
+	dy := math.Abs(float64(y1) - float64(y0))
+	var sx, sy int
+	var err, e2 float64
+
+	if x0 < x1 {
+		sx = 1
+	} else {
+		sx = -1
+	}
+	if y0 < y1 {
+		sy = 1
+	} else {
+		sy = -1
+	}
+	err = dx - dy
+
+	for {
+		ssd1306.Point(x0, y0, c)
+		if x0 == x1 && y0 == y1 {
+			break
+		}
+		e2 = 2*err
+		if e2 > -dy {
+			err -= dy
+			x0 += sx
+		}
+		if x0 == x1 && y0 == y1 {
+			ssd1306.Point(x0, y0, c)
+			break
+		}
+		if e2 < dx {
+			err += dx
+			y0 += sy
+		}
+	}
+}
+
+func (ssd1306 *SSD1306) Circle(x0, y0, radius int, c color.Gray16) {
+	f := 1 - radius
+	ddF_x := 1
+	ddF_y := -2 * radius
+	x := 0
+	y := radius
+
+	ssd1306.Point(x0, y0 + radius, c)
+	ssd1306.Point(x0, y0 - radius, c)
+	ssd1306.Point(x0 + radius, y0, c)
+	ssd1306.Point(x0 - radius, y0, c)
+
+	for x < y {
+		if f >= 0 {
+			y--
+			ddF_y += 2
+			f += ddF_y
+		}
+		x++
+		ddF_x += 2
+		f += ddF_x
+		ssd1306.Point(x0 + x, y0 + y, c)
+		ssd1306.Point(x0 - x, y0 + y, c)
+		ssd1306.Point(x0 + x, y0 - y, c)
+		ssd1306.Point(x0 - x, y0 - y, c)
+		ssd1306.Point(x0 + y, y0 + x, c)
+		ssd1306.Point(x0 - y, y0 + x, c)
+		ssd1306.Point(x0 + y, y0 - x, c)
+		ssd1306.Point(x0 - y, y0 - x, c)
+	}
+}
+
+func (ssd1306 *SSD1306) Rectangle(x0, y0, x1, y1 int, c color.Gray16) {
+	switch {
+	// Ignore backwards rectangles
+	case x0 > x1 || y0 > y1:
+		return
+	// If the rectangle is a line, draw it as one
+	case x0 == x1 || y0 == y1:
+		ssd1306.Line(x0, y0, x1, y1, c)
+	// This case can be optimized a lot
+	case y0 / 8 < y1 / 8: // Oh man, Vriska's gonna love all these 8's
+		var element int
+		b := ^byte(0) << uint(y0 % 8 - 1)
+
+		for x := x0; x <= x1; x++ {
+			element = ssd1306.width*(y0 / 8) + x;
+			if (c == color.White) {
+				ssd1306.buf[element] |= b;
+			} else {
+				ssd1306.buf[element] &^= b;
+			}
+		}
+
+		for ; y0 / 8 < y1 / 8; y0 = (y0 / 8 * 8 + 8) { // Yeah!!!!!!!!
+			b = ^byte(0)
+			for x := x0; x <= x1; x++ {
+				element = ssd1306.width*(y0 / 8) + x;
+				if (c == color.White) {
+					ssd1306.buf[element] |= b;
+				} else {
+					ssd1306.buf[element] &^= b;
+				}
+			}
+		}
+
+		b = ^byte(0) >> uint(7 - y1 % 8)
+		for x := x0; x <= x1; x++ {
+			element = ssd1306.width*(y1 / 8) + x;
+			if (c == color.White) {
+				ssd1306.buf[element] |= b;
+			} else {
+				ssd1306.buf[element] &^= b;
+			}
+		}
+	// Further optimization is possible, but it's easier to just use lines
+	default:
+		for y := y0; y <= y1; y++ {
+			ssd1306.Line(x0, y, x1, y, c)
+		}
+	}
+}
+
+// TODO: make this return an error instead of an int
+func (ssd1306 *SSD1306) Char(x, y int, c color.Gray16, r rune) int {
+	bufi := (ssd1306.width*(y/8)) + x
+	bufiup := bufi - ssd1306.width
+
+    if x >= ssd1306.width || y >= ssd1306.height {
+        return -1
+	}
+
+    if r < 0 || r > 127 {
+        return -1
+	}
+
+	if bufi < ssd1306.width * ssd1306.height / 8 && bufi >= 0 {
+		for i := 0; i < 5 && x + i < ssd1306.width; i++ {
+			if c == color.White {
+				ssd1306.buf[bufi+i] |= font[uint((5*int(r))+i)] >> uint(8 - y % 8)
+			} else {
+				ssd1306.buf[bufi+i] &^= font[uint((5*int(r))+i)] >> uint(8 - y % 8)
+			}
+		}
+	}
+    if bufiup < ssd1306.width * ssd1306.height / 8 && bufiup >= 0 {
+		for i := 0; i < 5 && x + i < ssd1306.width; i++ {
+            if c == color.White {
+                ssd1306.buf[bufiup+i] |= font[uint((5*int(r))+i)] << uint(y % 8)
+            } else {
+                ssd1306.buf[bufiup+i] &^= font[uint((5*int(r))+i)] << uint(y % 8)
+			}
+        }
     }
+
+    return 0
 }
