@@ -403,3 +403,28 @@ func (ssd1306 *SSD1306) Char(x, y int, c color.Gray16, r rune) int {
 
     return 0
 }
+
+func (ssd1306 *SSD1306) String(x, y int, c color.Gray16, s string) (rv int) {
+	xx := x
+	yy := y
+	rv = 0
+
+	for _, ch := range s {
+		switch ch {
+		case '\n':
+            xx = x
+            yy -= 8
+		case '\r':
+            xx = x
+		case '\v':
+            yy -= 8
+		case '\b':
+            xx -= 6
+		default:
+			rv = ssd1306.Char(xx, yy, c, ch)
+			xx += 6
+        }
+    }
+
+    return rv;
+}
