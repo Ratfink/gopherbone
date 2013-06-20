@@ -329,7 +329,7 @@ func (ssd1306 *SSD1306) Rectangle(x0, y0, x1, y1 int, c color.Gray16) {
 	// This case can be optimized a lot
 	case y0 / 8 < y1 / 8: // Oh man, Vriska's gonna love all these 8's
 		var element int
-		b := ^byte(0) << uint(y0 % 8 - 1)
+		b := ^byte(0) << uint(y0 % 8)
 
 		for x := x0; x <= x1; x++ {
 			element = ssd1306.width*(y0 / 8) + x;
@@ -340,7 +340,7 @@ func (ssd1306 *SSD1306) Rectangle(x0, y0, x1, y1 int, c color.Gray16) {
 			}
 		}
 
-		for ; y0 / 8 < y1 / 8; y0 = (y0 / 8 * 8 + 8) { // Yeah!!!!!!!!
+		for y0 = (y0 / 8 * 8 + 8); y0 / 8 < y1 / 8; y0 = (y0 / 8 * 8 + 8) { // Yeah!!!!!!!!
 			b = ^byte(0)
 			for x := x0; x <= x1; x++ {
 				element = ssd1306.width*(y0 / 8) + x;
@@ -385,18 +385,18 @@ func (ssd1306 *SSD1306) Char(x, y int, c color.Gray16, r rune) int {
 	if bufi < ssd1306.width * ssd1306.height / 8 && bufi >= 0 {
 		for i := 0; i < 5 && x + i < ssd1306.width; i++ {
 			if c == color.White {
-				ssd1306.buf[bufi+i] |= font[uint((5*int(r))+i)] >> uint(8 - y % 8)
+				ssd1306.buf[bufi+i] |= font[uint((5*int(r))+i)] >> uint(7 - y % 8)
 			} else {
-				ssd1306.buf[bufi+i] &^= font[uint((5*int(r))+i)] >> uint(8 - y % 8)
+				ssd1306.buf[bufi+i] &^= font[uint((5*int(r))+i)] >> uint(7 - y % 8)
 			}
 		}
 	}
     if bufiup < ssd1306.width * ssd1306.height / 8 && bufiup >= 0 {
 		for i := 0; i < 5 && x + i < ssd1306.width; i++ {
             if c == color.White {
-                ssd1306.buf[bufiup+i] |= font[uint((5*int(r))+i)] << uint(y % 8)
+                ssd1306.buf[bufiup+i] |= font[uint((5*int(r))+i)] << uint(1 + y % 8)
             } else {
-                ssd1306.buf[bufiup+i] &^= font[uint((5*int(r))+i)] << uint(y % 8)
+                ssd1306.buf[bufiup+i] &^= font[uint((5*int(r))+i)] << uint(1 + y % 8)
 			}
         }
     }
